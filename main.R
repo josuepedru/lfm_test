@@ -14,7 +14,7 @@ timeseries_test <- function(testasset, factors){
   date_cols <- names(factors)[sapply(factors, function(x) class(x) == "Date")]
   factors_renamed <- rename(factors, Date = all_of(date_cols))
   
-  # pivot long the testasset data frame in order to give join with the factors data frame
+  # pivot long the testasset data frame in order to join with the factors data frame
   data_regression <- testasset %>% 
     pivot_longer(cols = -Date, 
                  names_to = "Portfolio", 
