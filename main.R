@@ -4,28 +4,43 @@ library(broom)
 
 ### time series test ####
 
-timeseries_test <- function(testasset, factors){
+ts_test <- function(testasset, factors, startdate = NULL, enddate = NULL){
   # identify variables with class Date
   date_cols <- names(testasset)[sapply(testasset, function(x) class(x) == "Date")]
+  
   # rename those to "Date" in order to manipulate 
   testasset <- rename(testasset, Date = all_of(date_cols))
   
   # doing the same for the factors data frame
   date_cols <- names(factors)[sapply(factors, function(x) class(x) == "Date")]
-  factors_renamed <- rename(factors, Date = all_of(date_cols))
+  factors <- rename(factors, Date = all_of(date_cols))
+  
+  # Filter the data based on startdate and enddate if provided
+  if (!is.null(startdate) && !is.null(enddate)) {
+    testasset <- testasset %>%
+      filter(Date >= startdate, Date <= enddate)
+    factors <- factors %>%
+      filter(Date >= startdate, Date <= enddate)
+  }
   
   # pivot long the testasset data frame in order to join with the factors data frame
   data_regression <- testasset %>% 
     pivot_longer(cols = -Date, 
                  names_to = "Portfolio", 
                  values_to = "Return") %>% 
-    full_join(factors_renamed, by= "Date")
+    full_join(factors, by= "Date")
+  
+  # Generate the right-hand side of the formula string
+  rhs_formula <- factors %>%
+    dplyr::select(-Date) %>%
+    summarise(rhs_formula = paste(names(.), collapse = " + ")) %>%
+    pull(rhs_formula)
   
   # employ regression in order to extract coefficients 
   coefficients <- data_regression %>%
     group_by(Portfolio) %>%
     do(broom::tidy(
-      lm(Return ~ `Excess.Market.Return`+SMB, data = .),
+      lm(formula = paste("Return ~", rhs_formula), data = .),
     )) %>%
     select(-statistic)
   
@@ -40,7 +55,7 @@ timeseries_test <- function(testasset, factors){
   # residuals
   residuals <- data_regression %>%
     group_by(Portfolio) %>%
-    do(modelo= (lm(Return ~ `Excess.Market.Return`+SMB, data = .))) %>%
+    do(modelo= (lm(formula = paste("Return ~", rhs_formula), data = .))) %>%
     rowwise() %>%
     mutate(coeficientes = list(coef(modelo)),
            residuos = list(residuals(modelo))) %>%
@@ -57,17 +72,17 @@ timeseries_test <- function(testasset, factors){
   
   # Calculate the number of assets, the number of factors, and the number of observations
   N <- ncol(testasset)
-  K <- ncol(factors_renamed)
+  K <- ncol(factors)
   T <- nrow(testasset)
   
   # Calculate the expected factor returns (also the risk premia)
-  E_f <- factors_renamed %>%
+  E_f <- factors %>%
     select(where(is.numeric)) %>%  
     colMeans(na.rm = TRUE)
   
   ## Calculate the Omega matrix
   # let the factors data frame in the matrix form
-  factors_matrix <- factors_renamed %>% 
+  factors_matrix <- factors %>% 
     select_if(is.numeric)
   factors_matrix <- as.matrix(factors_matrix)
   
@@ -87,7 +102,7 @@ timeseries_test <- function(testasset, factors){
   
   # output
   return(list(loadings = loadings, residuals = residuals, 
-              intercepts= intercepts, p_value=p_value, risk_premium=E_f))
+              intercepts= intercepts, p_value = p_value, risk_premium=E_f))
 }
 
 
@@ -96,19 +111,139 @@ ff_factors <- read.csv("F-F_Research_Data_Factors.csv") %>%
   select(Date=X,`Excess Market Return`= Mkt.RF, SMB, HML) %>% 
   mutate(Date=as.Date(paste0(Date,"01"), format="%Y%m%d"))
 
-
-# Applied the function 
+# generate random portfolios return 
 testasset <- data.frame(date = ff_factors$Date,
                         Portfolio1=rnorm(nrow(ff_factors),mean = 0.05, sd = 0.2),
                         Portfolio2=rnorm(nrow(ff_factors),mean = 0.10, sd = 0.8),
                         Portfolio3=rnorm(nrow(ff_factors),mean = 0.15, sd = 0.10),
                         Portfolio4=rnorm(nrow(ff_factors),mean = 0.40, sd = 0.05))
 
+# create factors data frame 
 factors <- data.frame(DATE = ff_factors$Date, 
                       `Excess Market Return`=ff_factors$`Excess Market Return`, 
-                      SMB = ff_factors$SMB)
+                      SMB = ff_factors$SMB,
+                      HML = ff_factors$HML)
 
-result <- timeseries_test(testasset, factors)
+# apply the function for different windows 
+result1 <- ts_test(testasset, factors, 
+                  startdate = "2000-01-01", 
+                  enddate = "2008-01-01")
+result2 <- ts_test(testasset, factors, 
+                   startdate = "2008-01-01", 
+                   enddate = "2022-01-01")
+
+
+### Cross-sectional/Fama-Mcbeth test ####
+cross_sec_test <- function(testasset, factors, model, startdate = NULL, enddate = NULL){
+  # identify variables with class Date
+  date_cols <- names(testasset)[sapply(testasset, function(x) class(x) == "Date")]
+  
+  # rename those to "Date" in order to manipulate 
+  testasset <- rename(testasset, Date = all_of(date_cols))
+  
+  # doing the same for the factors data frame
+  date_cols <- names(factors)[sapply(factors, function(x) class(x) == "Date")]
+  factors <- rename(factors, Date = all_of(date_cols))
+  
+  # Filter the data based on startdate and enddate if provided
+  if (!is.null(startdate) && !is.null(enddate)) {
+    testasset <- testasset %>%
+      filter(Date >= startdate, Date <= enddate)
+    factors <- factors %>%
+      filter(Date >= startdate, Date <= enddate)
+  }
+  
+  # pivot long the testasset data frame in order to join with the factors data frame
+  data_regression <- testasset %>% 
+    pivot_longer(cols = -Date, 
+                 names_to = "Portfolio", 
+                 values_to = "Return") %>% 
+    full_join(factors, by= "Date")
+  
+  ## First-stage: time-series regression
+  # Generate the right-hand side of the formula string
+  rhs_formula <- factors %>%
+    dplyr::select(-Date) %>%
+    summarise(rhs_formula = paste(names(.), collapse = " + ")) %>%
+    pull(rhs_formula)
+  
+  # employ regression in order to extract coefficients 
+  coefficients <- data_regression %>%
+    group_by(Portfolio) %>%
+    do(broom::tidy(
+      lm(formula = paste("Return ~", rhs_formula), data = .),
+    )) %>%
+    select(-statistic)
+  
+  # loadings 
+  loadings <- coefficients %>%
+    filter(term != "(Intercept)")
+  
+  # intercept coefficients 
+  intercepts <- coefficients %>%
+    filter(term == "(Intercept)")
+  
+  # residuals
+  residuals <- data_regression %>%
+    group_by(Portfolio) %>%
+    do(modelo= (lm(formula = paste("Return ~", rhs_formula), data = .))) %>%
+    rowwise() %>%
+    mutate(coeficientes = list(coef(modelo)),
+           residuos = list(residuals(modelo))) %>%
+    select(Portfolio, residuos) %>%
+    tidyr::unnest(residuos) %>%
+    group_by(Portfolio) %>%
+    mutate(id = row_number())%>%
+    pivot_wider(names_from = Portfolio, values_from = residuos, id_cols = id) %>% 
+    select(-id)
+  
+  ### second-stage: cross-section and fama-mcbeth
+  if(model=="cross-section"){
+    ## cross-section regression
+    # put loadings in the long version
+    loadings_long <- loadings %>% 
+      select(Portfolio, term, estimate) %>% 
+      pivot_wider(names_from = term, values_from = estimate)
+    
+    # obtain average excess return and put it the long version
+    average_excess <- testasset %>% 
+      pivot_longer(cols = -Date, 
+                   names_to = "Portfolio", 
+                   values_to = "Return") %>% 
+      group_by(Portfolio) %>% 
+      summarise(`Average Excess Return`=mean(Return))
+    
+    # join and employ regression
+    cross_data <- inner_join(average_excess,loadings_long,by="Portfolio") %>% 
+      lm(formula = paste("`Average Excess Return`~", rhs_formula),data=.)
+    
+    # obtain risk premia
+    riskpremia <- summary(cross_data)
+  }else{
+    ## fama-mcbeth regression
+    famamcbeth_data <- testasset %>% 
+      pivot_longer(cols = -Date, 
+                   names_to = "Portfolio", 
+                   values_to = "Return") %>% 
+      full_join(loadings_long, by="Portfolio") %>% 
+      group_by(Date) %>% 
+      lm(formula = paste("Return ~", rhs_formula),data=.)
+    
+    # obtain risk premia
+    riskpremia <- summary(famamcbeth_data)
+  }
+  return(list(residuals=residuals, loadings=loadings, 
+              intercepts= intercepts, riskpremia=riskpremia))
+}
+
+
+
+# apply the function for different windows 
+result1 <- cross_sec_test(testasset, factors,model="cross-section", 
+                   startdate = "2000-01-01", 
+                   enddate = "2008-01-01")
+
+result2 <- cross_sec_test(testasset, factors,model="cross-section")
 
 
 
