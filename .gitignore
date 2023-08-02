@@ -2,6 +2,8 @@
 *.pdf
 *.xlsx
 *.xls
+*.csv
+
 
 ## Core latex/pdflatex auxiliary files:
 *.aux
