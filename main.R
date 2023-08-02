@@ -163,7 +163,7 @@ result2 <- ts_test(testasset, factors,
 
 
 ### Cross-sectional/Fama-Mcbeth test ####
-cross_sec_test <- function(testasset, factors, model, startdate = NULL, enddate = NULL){
+cross_sec_test <- function(testasset, factors, model, startdate = NULL, enddate = NULL, sd = c("standard", "neweywest")){
   # identify variables with class Date
   date_cols <- names(testasset)[sapply(testasset, function(x) class(x) == "Date")]
   
@@ -190,41 +190,27 @@ cross_sec_test <- function(testasset, factors, model, startdate = NULL, enddate 
     full_join(factors, by= "Date")
   
   ## First-stage: time-series regression
+  
+  ts_test_results <-
+    ts_test(testasset,
+            factors,
+            startdate,
+            enddate,
+            sd)
+  
+  # Extract the elements of the result list that you're interested in
+  loadings <- ts_test_results$loadings
+  residuals <- ts_test_results$residuals
+  intercepts <- ts_test_results$intercepts
+  p_value_GRS <- ts_test_results$p_value
+  risk_premium <- ts_test_results$risk_premium
+  r_squared_adj <- ts_test_results$r_squared_adj
+  
   # Generate the right-hand side of the formula string
   rhs_formula <- factors %>%
     dplyr::select(-Date) %>%
     summarise(rhs_formula = paste(names(.), collapse = " + ")) %>%
     pull(rhs_formula)
-  
-  # employ regression in order to extract coefficients 
-  coefficients <- data_regression %>%
-    group_by(Portfolio) %>%
-    do(broom::tidy(
-      lm(formula = paste("Return ~", rhs_formula), data = .),
-    )) %>%
-    select(-statistic)
-  
-  # loadings 
-  loadings <- coefficients %>%
-    filter(term != "(Intercept)")
-  
-  # intercept coefficients 
-  intercepts <- coefficients %>%
-    filter(term == "(Intercept)")
-  
-  # residuals
-  residuals <- data_regression %>%
-    group_by(Portfolio) %>%
-    do(modelo= (lm(formula = paste("Return ~", rhs_formula), data = .))) %>%
-    rowwise() %>%
-    mutate(coeficientes = list(coef(modelo)),
-           residuos = list(residuals(modelo))) %>%
-    select(Portfolio, residuos) %>%
-    tidyr::unnest(residuos) %>%
-    group_by(Portfolio) %>%
-    mutate(id = row_number())%>%
-    pivot_wider(names_from = Portfolio, values_from = residuos, id_cols = id) %>% 
-    select(-id)
   
   ### second-stage: cross-section and fama-mcbeth
   if(model=="cross-section"){
@@ -241,6 +227,7 @@ cross_sec_test <- function(testasset, factors, model, startdate = NULL, enddate 
                    values_to = "Return") %>% 
       group_by(Portfolio) %>% 
       summarise(`Average Excess Return`=mean(Return))
+    
     
     # join and employ regression
     cross_data <- inner_join(average_excess,loadings_long,by="Portfolio") %>% 
@@ -261,8 +248,18 @@ cross_sec_test <- function(testasset, factors, model, startdate = NULL, enddate 
     # obtain risk premia
     riskpremia <- summary(famamcbeth_data)
   }
-  return(list(residuals=residuals, loadings=loadings, 
-              intercepts= intercepts, riskpremia=riskpremia))
+  return(list(
+    first_stage = list(
+      residuals = residuals,
+      loadings = loadings,
+      intercepts = intercepts,
+      p_value_GRS = p_value_GRS,
+      r_squared = r_squared_adj
+    ),
+    second_stage = list(
+      riskpremia = riskpremia
+    )
+  ))
 }
 
 
