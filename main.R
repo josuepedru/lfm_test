@@ -4,7 +4,10 @@ library(broom)
 
 ### time series test ####
 
-ts_test <- function(testasset, factors, startdate = NULL, enddate = NULL){
+ts_test <- function(testasset, factors, startdate = NULL, enddate = NULL, sd = c("standard", "neweywest")){
+  
+  sd <- match.arg(sd) # check if sd specified is in the list, if not provided "standard" is the default
+  
   # identify variables with class Date
   date_cols <- names(testasset)[sapply(testasset, function(x) class(x) == "Date")]
   
@@ -36,12 +39,28 @@ ts_test <- function(testasset, factors, startdate = NULL, enddate = NULL){
     summarise(rhs_formula = paste(names(.), collapse = " + ")) %>%
     pull(rhs_formula)
   
-  # employ regression in order to extract coefficients 
-  coefficients <- data_regression %>%
+  # employ regression in order to extract models for each portfolio
+  models <- data_regression %>%
     group_by(Portfolio) %>%
-    do(broom::tidy(
-      lm(formula = paste("Return ~", rhs_formula), data = .),
+    do(model = lm(formula = paste("Return ~", rhs_formula), data = .))
+  
+  # employ regression in order to extract coefficients 
+  coefficients <- models %>%
+    rowwise() %>%
+    mutate(tidy_model = list(
+      if (sd == "neweywest") {
+        coeftest_result <- coeftest(model, vcov. = NeweyWest(model))
+        tibble(term = rownames(coeftest_result),
+               estimate = coeftest_result[, "Estimate"],
+               std.error = coeftest_result[, "Std. Error"],
+               statistic = coeftest_result[, "t value"],
+               p.value = coeftest_result[, "Pr(>|t|)"])
+      } else if (sd == "standard") {
+        broom::tidy(model)
+      }
     )) %>%
+    select(-model) %>%
+    unnest(tidy_model) %>%
     select(-statistic)
   
   # loadings 
@@ -51,6 +70,13 @@ ts_test <- function(testasset, factors, startdate = NULL, enddate = NULL){
   # intercept coefficients 
   intercepts <- coefficients %>%
     filter(term == "(Intercept)")
+  
+  # get R-squared and Adjusted R-squared from each model
+  models <- models %>%
+    rowwise(Portfolio) %>%
+    mutate(r_squared = summary(model)$r.squared,
+           adj_r_squared = summary(model)$adj.r.squared) %>%
+    select(Portfolio, r_squared, adj_r_squared)
   
   # residuals
   residuals <- data_regression %>%
@@ -102,7 +128,8 @@ ts_test <- function(testasset, factors, startdate = NULL, enddate = NULL){
   
   # output
   return(list(loadings = loadings, residuals = residuals, 
-              intercepts= intercepts, p_value = p_value, risk_premium=E_f))
+              intercepts = intercepts, p_value = p_value, 
+              risk_premium = E_f, r_squared_adj = models))
 }
 
 
