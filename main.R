@@ -165,7 +165,7 @@ result2 <- ts_test(testasset, factors,
 ### Cross-sectional/Fama-Mcbeth test ####
 cross_sec_test <- function(testasset, factors = NULL,
                            model = c("cross-section", "fama-macbeth"),
-                           characteristic = NULL, char.only = TRUE,
+                           characteristic = NULL, char.only = FALSE,
                            startdate = NULL, enddate = NULL, sd = c("standard", "neweywest")) {
   
   # Helper function to rename Date columns
