@@ -163,150 +163,64 @@ result2 <- ts_test(testasset, factors,
 
 
 ### Cross-sectional/Fama-Mcbeth test ####
-cross_sec_test <- function(testasset, factors = NULL, characteristic = NULL, model, startdate = NULL, enddate = NULL, sd = c("standard", "neweywest")) {
+cross_sec_test <- function(testasset, factors = NULL,
+                           model = c("cross-section", "fama-macbeth"),
+                           characteristic = NULL, char.only = TRUE,
+                           startdate = NULL, enddate = NULL, sd = c("standard", "neweywest")) {
   
-  # identify variables with class Date
-  date_cols <- names(testasset)[sapply(testasset, function(x) class(x) == "Date")]
-  # rename those to "Date" in order to manipulate 
-  testasset <- rename(testasset, Date = all_of(date_cols))
-  
-  # Check if factors data frame is provided
-  if (!is.null(factors)) {
-    date_cols <- names(factors)[sapply(factors, function(x) class(x) == "Date")]
-    factors <- rename(factors, Date = all_of(date_cols))
+  # Helper function to rename Date columns
+  rename_date <- function(df) {
+    date_cols <- names(df)[sapply(df, function(x) class(x) == "Date")]
+    rename(df, Date = all_of(date_cols))
   }
   
-  # Check if characteristic data frame is provided
-  if (!is.null(characteristic)) {
-    date_cols <- names(characteristic)[sapply(characteristic, function(x) class(x) == "Date")]
-    characteristic <- rename(characteristic, Date = all_of(date_cols))
-  }
+  # Rename testasset date column
+  testasset <- rename_date(testasset)
   
-  # Filter the data based on startdate and enddate if provided
+  # Rename characteristic and factors date column
+  if (!is.null(factors)) factors <- rename_date(factors)
+  if (!is.null(characteristic)) characteristic <- rename_date(characteristic)
+  
+  # Filter based on startdate and enddate
   if (!is.null(startdate) && !is.null(enddate)) {
-    testasset <- testasset %>%
-      filter(Date >= startdate, Date <= enddate)
-    if (!is.null(factors)) {
-      factors <- factors %>%
-        filter(Date >= startdate, Date <= enddate)
-    }
+    testasset <- testasset %>% filter(Date >= startdate, Date <= enddate)
+    if (!is.null(factors)) factors <- factors %>% filter(Date >= startdate, Date <= enddate)
   }
   
-  ## First-stage: time-series regression. Run only with factors !is.null(factors)
-  if (!is.null(factors)){
-    # pivot long the testasset data frame in order to join with the factors data frame
+  # First stage: time-series regression
+  ts_test_results <- list()
+  if (char.only == FALSE) {
     data_regression <- testasset %>% 
-      pivot_longer(cols = -Date, 
-                   names_to = "Portfolio", 
-                   values_to = "Return")
+      pivot_longer(cols = -Date, names_to = "Portfolio", values_to = "Return") %>%
+      left_join(factors, by = "Date")
     
-    data_regression <- data_regression %>% full_join(factors, by= "Date")
-  
-  
-  
-  ts_test_results <- ts_test(testasset,
-                             factors,
-                             startdate,
-                             enddate,
-                             sd)
-  
-  # Extract the elements of the result list that you're interested in
-  loadings <- ts_test_results$loadings
-  residuals <- ts_test_results$residuals
-  intercepts <- ts_test_results$intercepts
-  p_value_GRS <- ts_test_results$p_value
-  risk_premium <- ts_test_results$risk_premium
-  r_squared_adj <- ts_test_results$r_squared_adj
+    ts_test_results <- ts_test(testasset, factors, startdate, enddate, sd)
   }
   
-  ### second-stage: cross-section and fama-mcbeth
-  if (model == "cross-section"){
-    ## cross-section regression
-    # Generate the right-hand side of the formula string
-    rhs_formula <- factors %>%
-      dplyr::select(-Date) %>%
-      summarise(rhs_formula = paste(names(.), collapse = " + ")) %>%
-      pull(rhs_formula)
-    
-    # put loadings in the long version
-    loadings_long <- loadings %>% 
-      select(Portfolio, term, estimate) %>% 
+  # Prepare data for second stage
+  famamcbeth_data <- testasset %>%
+    pivot_longer(cols = -Date, names_to = "Portfolio", values_to = "Return")
+  
+  if (!is.null(ts_test_results$loadings)) {
+    loadings_long <- ts_test_results$loadings %>%
+      select(Portfolio, term, estimate) %>%
       pivot_wider(names_from = term, values_from = estimate)
     
-    # obtain average excess return and put it the long version
-    average_excess <- testasset %>% 
-      pivot_longer(cols = -Date, 
-                   names_to = "Portfolio", 
-                   values_to = "Return") %>% 
-      group_by(Portfolio) %>% 
-      summarise(`Average Excess Return` = mean(Return))
-    
-    # join and employ regression
-    cross_data <- inner_join(average_excess, loadings_long, by = "Portfolio") %>% 
-      lm(formula = paste("`Average Excess Return`~", rhs_formula), data = .)
-    
-    # obtain risk premia
-    riskpremia <- summary(cross_data)
-    
-    ## output 
-    return(list(
-      first_stage = list(
-      residuals = residuals,
-      loadings = loadings,
-      intercepts = intercepts,
-      p_value_GRS = p_value_GRS,
-      r_squared = r_squared_adj
-      ),
-      second_stage = list(
-      riskpremia = riskpremia
-      )
-    ))
-    
-  }else{
-    ## fama-mcbeth regression
-    
-    # characteristic = NULL
-    if(is.null(characteristic)){
-      # put loadings in the long version
-      loadings_long <- loadings %>% 
-        select(Portfolio, term, estimate) %>% 
-        pivot_wider(names_from = term, values_from = estimate)
-      
-      famamcbeth_data <- testasset %>% 
-        pivot_longer(cols = -Date, 
-                     names_to = "Portfolio", 
-                     values_to = "Return") %>% 
-        full_join(loadings_long, by = "Portfolio") 
-    }else if(is.null(factors)){
-      
-      # factors = NULL
-      famamcbeth_data <- testasset %>% 
-        pivot_longer(cols = -Date, 
-                     names_to = "Portfolio", 
-                     values_to = "Return") %>% 
-        inner_join(characteristic, by = c("Date", "Portfolio"))
-      
-    }else{
-      # put loadings in the long version
-      loadings_long <- loadings %>% 
-        select(Portfolio, term, estimate) %>% 
-        pivot_wider(names_from = term, values_from = estimate)
-      
-      famamcbeth_data <- testasset %>% 
-        pivot_longer(cols = -Date, 
-                     names_to = "Portfolio", 
-                     values_to = "Return") %>% 
-        full_join(loadings_long, by = "Portfolio") %>% 
-        inner_join(characteristic, by = c("Date", "Portfolio"))
-    }
-    
-    # Generate the right-hand side of the formula string
-    rhs_formula <- famamcbeth_data %>%
-      dplyr::select(-Date, -Return, -Portfolio) %>%
-      summarise(rhs_formula = paste(names(.), collapse = " + ")) %>%
-      pull(rhs_formula)
-    
-    # panel regression
+    famamcbeth_data <- famamcbeth_data %>% left_join(loadings_long, by = "Portfolio")
+  }
+  
+  if (char.only || !is.null(characteristic)) {
+    famamcbeth_data <- famamcbeth_data %>% left_join(characteristic, by = c("Date", "Portfolio"))
+  }
+  
+  rhs_formula <- famamcbeth_data %>%
+    select(-Date, -Return, -Portfolio) %>%
+    summarise(rhs_formula = paste(names(.), collapse = " + ")) %>%
+    pull(rhs_formula)
+  
+  ### Second stage: cross-section or fama-macbeth
+  ## Cross-section
+  if (model == "cross-section") {
     famamcbeth_result <- famamcbeth_data %>%
       group_by(Date) %>%
       nest_by() %>%
@@ -315,7 +229,57 @@ cross_sec_test <- function(testasset, factors = NULL, characteristic = NULL, mod
       select(-data, -model) %>%
       unnest(tidied)
     
-    # riskpremia
+    average_excess <- testasset %>% 
+      pivot_longer(cols = -Date, 
+                   names_to = "Portfolio", 
+                   values_to = "Return") %>% 
+      group_by(Portfolio) %>% 
+      summarise(`Average Excess Return` = mean(Return))
+    
+    cross_data <- inner_join(average_excess, loadings_long, by = "Portfolio") %>% 
+      lm(formula = paste("`Average Excess Return` ~", rhs_formula), data = .)
+    
+    output <- list()
+    # first stage results
+    output$first_stage <- list(
+      residuals = ts_test_results$residuals,
+      loadings = ts_test_results$loadings,
+      intercepts = ts_test_results$intercepts,
+      p_value_GRS = ts_test_results$p_value,
+      r_squared = ts_test_results$r_squared_adj)
+    
+    # second stage results  
+    riskpremia <- summary(cross_data)
+    output$second_stage <- list(
+      riskpremia = riskpremia)  
+    
+  }
+  
+  ## Fama-Mcbeth
+  if (model == "fama-macbeth"){
+    famamcbeth_result <- famamcbeth_data %>%
+      group_by(Date) %>%
+      nest_by() %>%
+      mutate(model = list(lm(formula = paste("Return ~", rhs_formula), data = data)),
+             tidied = list(broom::tidy(model))) %>%
+      select(-data, -model) %>%
+      unnest(tidied)
+    
+    # Prepare output
+    output <- list()
+    
+    # first stage results 
+    if (!is.null(ts_test_results$loadings)) {
+      output$first_stage <- list(
+        residuals = ts_test_results$residuals,
+        loadings = ts_test_results$loadings,
+        intercepts = ts_test_results$intercepts,
+        p_value_GRS = ts_test_results$p_value,
+        r_squared = ts_test_results$r_squared_adj
+      )
+    }
+    
+    # second stage results
     riskpremia <- famamcbeth_result %>%
       filter(term != "(Intercept)") %>%
       select(Date, term, estimate)
@@ -328,27 +292,14 @@ cross_sec_test <- function(testasset, factors = NULL, characteristic = NULL, mod
       group_by(term) %>%
       summarise(variance_beta = var(estimate, na.rm = TRUE))
     
-    ## output 
-    return(list(
-      
-      if(!is.null(factors)){
-        
-        first_stage = list(
-        residuals = residuals,
-        loadings = loadings,
-        intercepts = intercepts,
-        p_value_GRS = p_value_GRS,
-        r_squared = r_squared_adj
-      
-        )},
-      second_stage = list(
-        riskpremia = riskpremia,
-        riskpremia_mean = riskpremia_mean,
-        riskpremia_variance = riskpremia_variance
-      )
-    ))
-  }
+    output$second_stage <- list(
+      riskpremia = riskpremia,
+      riskpremia_mean = riskpremia_mean,
+      riskpremia_variance = riskpremia_variance)}
+  
+  return(output)
 }
+
 
 # import some factors 
 ff_factors <- read.csv("F-F_Research_Data_Factors.csv") %>% 
@@ -378,26 +329,34 @@ characteristic <- testasset %>%
          B2M = rnorm(n=55728, mean = 2, sd = 4),
          Revenue = rnorm(n=55728, mean = 4, sd = 8))
 
-## run 
-result <- cross_sec_test(testasset, 
-                         factors,
-                         model = "",
-                         startdate = NULL,
-                         enddate = NULL,
-                         sd = c("standard", "neweywest"))
 
-result <- cross_sec_test(testasset, 
-                         characteristic,
-                         model = "",
-                         startdate = NULL,
-                         enddate = NULL,
-                         sd = c("standard", "neweywest"))
+# cross-sectional test
+cross_section_opt <- cross_sec_test(testasset,
+                                        factors,
+                                        characteristic=NULL,
+                                        model="cross-section",
+                                        char.only = FALSE,
+                                        sd = "standard")
 
-
-
-
-
-
-
-
-
+## fama-mcbeth
+# test both, factors and characteristics
+both <- cross_sec_test(testasset,
+                           factors,
+                           characteristic,
+                           model="fama-macbeth",
+                           char.only = FALSE,
+                           sd = "standard")
+# test only characteristics
+charac_only <- cross_sec_test(testasset,
+                                  factors=NULL,
+                                  characteristic,
+                                  model="fama-macbeth",
+                                  char.only = TRUE,
+                                  sd = "standard")
+# test only factors
+factors_only <- cross_sec_test(testasset,
+                         factors=factors,
+                         characteristic=NULL,
+                         model="fama-macbeth",
+                         char.only = FALSE,
+                         sd = "standard")
