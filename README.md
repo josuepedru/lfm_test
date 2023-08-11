@@ -1,7 +1,3 @@
-Certainly! Here's a README for the two functions you provided:
-
----
-
 # Time Series and Cross-sectional/Fama-Macbeth Tests
 
 This repository contains two primary functions for conducting time series tests and cross-sectional/Fama-Macbeth tests on financial data. These functions are designed to work with asset returns and factor data to evaluate the performance and risk of portfolios.
