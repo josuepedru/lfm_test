@@ -43,7 +43,7 @@ This function conducts a cross-sectional or Fama-Macbeth regression test on asse
 - `factors`: A dataframe containing factor returns with a Date column.
 - `characteristic`: Optional dataframe containing asset characteristics with a Date and Portfolio column.
 - `model`: Regression model to use. Options are "cross-section" and "fama-macbeth". Default is "cross-section".
-- `char.only`: If TRUE, only uses characteristics in the regression. Default is TRUE.
+- `char.only`: If TRUE, only uses characteristics in the regression. Default is FALSE.
 - `startdate`: Optional start date for the analysis.
 - `enddate`: Optional end date for the analysis.
 - `sd`: Standard deviation method. Options are "standard" and "neweywest". Default is "standard".
