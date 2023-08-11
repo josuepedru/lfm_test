@@ -5,20 +5,16 @@ library(lmtest)
 library(sandwich)
 
 ### time series test ####
-
 ts_test <- function(testasset, factors, startdate = NULL, enddate = NULL, sd = c("standard", "neweywest")){
   
   sd <- match.arg(sd) # check if sd specified is in the list, if not provided "standard" is the default
   
-  # identify variables with class Date
-  date_cols <- names(testasset)[sapply(testasset, function(x) class(x) == "Date")]
-  
-  # rename those to "Date" in order to manipulate 
-  testasset <- rename(testasset, Date = all_of(date_cols))
-  
-  # doing the same for the factors data frame
-  date_cols <- names(factors)[sapply(factors, function(x) class(x) == "Date")]
-  factors <- rename(factors, Date = all_of(date_cols))
+  # Rename data frame columns 
+  testasset <- testasset %>%
+    rename_with(~ "Return", .cols = where(is.numeric)) %>% 
+    rename_with(~ "Instrument", .cols = where(is.character)) %>% 
+    rename_with(~ "Date", .cols = where(is.Date))
+  if(!is.null(factors)) factors <- factors %>%rename_with(~ "Date", .cols = where(is.Date))
   
   # Filter the data based on startdate and enddate if provided
   if (!is.null(startdate) && !is.null(enddate)) {
@@ -28,22 +24,21 @@ ts_test <- function(testasset, factors, startdate = NULL, enddate = NULL, sd = c
       filter(Date >= startdate, Date <= enddate)
   }
   
-  # pivot long the testasset data frame in order to join with the factors data frame
+  # join testasset with the factors data frame
   data_regression <- testasset %>% 
-    pivot_longer(cols = -Date, 
-                 names_to = "Portfolio", 
-                 values_to = "Return") %>% 
     full_join(factors, by= "Date")
   
   # Generate the right-hand side of the formula string
   rhs_formula <- factors %>%
+    ungroup() %>%
     dplyr::select(-Date) %>%
-    summarise(rhs_formula = paste(names(.), collapse = " + ")) %>%
+    summarise(rhs_formula = paste(sapply(names(.), function(x) if(grepl(" ", x)) paste0("`", x, "`") else x), collapse = " + ")) %>%
     pull(rhs_formula)
   
   # employ regression in order to extract models for each portfolio
   models <- data_regression %>%
-    group_by(Portfolio) %>%
+    na.omit() %>% 
+    group_by(Instrument) %>%
     do(model = lm(formula = paste("Return ~", rhs_formula), data = .))
   
   # employ regression in order to extract coefficients 
@@ -75,23 +70,24 @@ ts_test <- function(testasset, factors, startdate = NULL, enddate = NULL, sd = c
   
   # get R-squared and Adjusted R-squared from each model
   models <- models %>%
-    rowwise(Portfolio) %>%
+    rowwise(Instrument) %>%
     mutate(r_squared = summary(model)$r.squared,
            adj_r_squared = summary(model)$adj.r.squared) %>%
-    select(Portfolio, r_squared, adj_r_squared)
+    select(Instrument, r_squared, adj_r_squared)
   
   # residuals
   residuals <- data_regression %>%
-    group_by(Portfolio) %>%
+    na.omit() %>% 
+    group_by(Instrument) %>%
     do(modelo= (lm(formula = paste("Return ~", rhs_formula), data = .))) %>%
     rowwise() %>%
     mutate(coeficientes = list(coef(modelo)),
            residuos = list(residuals(modelo))) %>%
-    select(Portfolio, residuos) %>%
+    select(Instrument, residuos) %>%
     tidyr::unnest(residuos) %>%
-    group_by(Portfolio) %>%
+    group_by(Instrument) %>%
     mutate(id = row_number())%>%
-    pivot_wider(names_from = Portfolio, values_from = residuos, id_cols = id) %>% 
+    pivot_wider(names_from = Instrument, values_from = residuos, id_cols = id) %>% 
     select(-id)
   
   ## GRS test
@@ -131,35 +127,8 @@ ts_test <- function(testasset, factors, startdate = NULL, enddate = NULL, sd = c
   # output
   return(list(loadings = loadings, residuals = residuals, 
               intercepts = intercepts, p_value = p_value, 
-              risk_premium = E_f, r_squared_adj = models))
+              risk_premium = E_f, r_squared_adj = modeltests))
 }
-
-
-# import some factors 
-ff_factors <- read.csv("F-F_Research_Data_Factors.csv") %>% 
-  select(Date=X,`Excess Market Return`= Mkt.RF, SMB, HML) %>% 
-  mutate(Date=as.Date(paste0(Date,"01"), format="%Y%m%d"))
-
-# generate random portfolios return 
-testasset <- data.frame(date = ff_factors$Date,
-                        Portfolio1=rnorm(nrow(ff_factors),mean = 0.05, sd = 0.2),
-                        Portfolio2=rnorm(nrow(ff_factors),mean = 0.10, sd = 0.8),
-                        Portfolio3=rnorm(nrow(ff_factors),mean = 0.15, sd = 0.10),
-                        Portfolio4=rnorm(nrow(ff_factors),mean = 0.40, sd = 0.05))
-
-# create factors data frame 
-factors <- data.frame(DATE = ff_factors$Date, 
-                      `Excess Market Return`=ff_factors$`Excess Market Return`, 
-                      SMB = ff_factors$SMB,
-                      HML = ff_factors$HML)
-
-# apply the function for different windows 
-result1 <- ts_test(testasset, factors, 
-                  startdate = "2000-01-01", 
-                  enddate = "2008-01-01")
-result2 <- ts_test(testasset, factors, 
-                   startdate = "2008-01-01", 
-                   enddate = "2022-01-01")
 
 
 ### Cross-sectional/Fama-Mcbeth test ####
@@ -168,18 +137,16 @@ cross_sec_test <- function(testasset, factors = NULL,
                            characteristic = NULL, char.only = FALSE,
                            startdate = NULL, enddate = NULL, sd = c("standard", "neweywest")) {
   
-  # Helper function to rename Date columns
-  rename_date <- function(df) {
-    date_cols <- names(df)[sapply(df, function(x) class(x) == "Date")]
-    rename(df, Date = all_of(date_cols))
-  }
+  # Rename data frame columns 
+  testasset <- testasset %>%
+    rename_with(~ "Return", .cols = where(is.numeric)) %>% 
+    rename_with(~ "Instrument", .cols = where(is.character)) %>% 
+    rename_with(~ "Date", .cols = where(is.Date))
+  if(!is.null(characteristic)){ characteristic <- characteristic %>%
+    rename_with(~ "Instrument", .cols = where(is.character)) %>% 
+    rename_with(~ "Date", .cols = where(is.Date))}
+  if(!is.null(factors)) factors <- factors %>%rename_with(~ "Date", .cols = where(is.Date))
   
-  # Rename testasset date column
-  testasset <- rename_date(testasset)
-  
-  # Rename characteristic and factors date column
-  if (!is.null(factors)) factors <- rename_date(factors)
-  if (!is.null(characteristic)) characteristic <- rename_date(characteristic)
   
   # Filter based on startdate and enddate
   if (!is.null(startdate) && !is.null(enddate)) {
@@ -191,36 +158,31 @@ cross_sec_test <- function(testasset, factors = NULL,
   ts_test_results <- list()
   if (char.only == FALSE) {
     data_regression <- testasset %>% 
-      pivot_longer(cols = -Date, names_to = "Portfolio", values_to = "Return") %>%
       left_join(factors, by = "Date")
     
     ts_test_results <- ts_test(testasset, factors, startdate, enddate, sd)
   }
   
-  # Prepare data for second stage
-  famamcbeth_data <- testasset %>%
-    pivot_longer(cols = -Date, names_to = "Portfolio", values_to = "Return")
-  
   if (!is.null(ts_test_results$loadings)) {
     loadings_long <- ts_test_results$loadings %>%
-      select(Portfolio, term, estimate) %>%
+      select(Instrument, term, estimate) %>%
       pivot_wider(names_from = term, values_from = estimate)
     
-    famamcbeth_data <- famamcbeth_data %>% left_join(loadings_long, by = "Portfolio")
+    testasset <- testasset %>% left_join(loadings_long, by = "Instrument")
   }
   
   if (char.only || !is.null(characteristic)) {
-    famamcbeth_data <- famamcbeth_data %>% left_join(characteristic, by = c("Date", "Portfolio"))
+    famamcbeth_data <- testasset %>% left_join(characteristic, by = c("Date", "Instrument"))
   }
   
   rhs_formula <- famamcbeth_data %>%
-    select(-Date, -Return, -Portfolio) %>%
-    summarise(rhs_formula = paste(names(.), collapse = " + ")) %>%
-    pull(rhs_formula)
+    ungroup() %>%
+    dplyr::select(-Date, -Return, -Instrument) %>%
+    {paste(names(.), collapse = " + ")}
   
   ### Second stage: cross-section or fama-macbeth
   ## Cross-section
-  if (model == "cross-section") {
+  if (model == "cross-section"){
     famamcbeth_result <- famamcbeth_data %>%
       group_by(Date) %>%
       nest_by() %>%
@@ -231,12 +193,12 @@ cross_sec_test <- function(testasset, factors = NULL,
     
     average_excess <- testasset %>% 
       pivot_longer(cols = -Date, 
-                   names_to = "Portfolio", 
+                   names_to = "Instrument", 
                    values_to = "Return") %>% 
-      group_by(Portfolio) %>% 
+      group_by(Instrument) %>% 
       summarise(`Average Excess Return` = mean(Return))
     
-    cross_data <- inner_join(average_excess, loadings_long, by = "Portfolio") %>% 
+    cross_data <- inner_join(average_excess, loadings_long, by = "Instrument") %>% 
       lm(formula = paste("`Average Excess Return` ~", rhs_formula), data = .)
     
     output <- list()
@@ -257,7 +219,9 @@ cross_sec_test <- function(testasset, factors = NULL,
   
   ## Fama-Mcbeth
   if (model == "fama-macbeth"){
+    
     famamcbeth_result <- famamcbeth_data %>%
+      na.omit() %>% 
       group_by(Date) %>%
       nest_by() %>%
       mutate(model = list(lm(formula = paste("Return ~", rhs_formula), data = data)),
@@ -292,50 +256,29 @@ cross_sec_test <- function(testasset, factors = NULL,
       group_by(term) %>%
       summarise(variance_beta = var(estimate, na.rm = TRUE))
     
+    riskpremia_t_stat <- riskpremia_mean %>%
+      left_join(riskpremia_variance, by = "term") %>%
+      mutate(T = n(),
+             t_stat = mean_beta / sqrt(variance_beta / T)) %>%
+      select(term, t_stat)
+    
     output$second_stage <- list(
       riskpremia = riskpremia,
       riskpremia_mean = riskpremia_mean,
-      riskpremia_variance = riskpremia_variance)}
+      riskpremia_variance = riskpremia_variance,
+      t_statistics = riskpremia_t_stat
+    )}
   
   return(output)
 }
 
 
-# import some factors 
-ff_factors <- read.csv("F-F_Research_Data_Factors.csv") %>% 
-  select(Date=X,`Excess Market Return`= Mkt.RF, SMB, HML) %>% 
-  mutate(Date=as.Date(paste0(Date,"01"), format="%Y%m%d"))
-
-# generate random portfolios return 
-# industry portfolio plus 40 portftolios anomalys
-testasset <- read.csv("48_Industry_Portfolios.csv",
-                      header = TRUE,skip=11)[c(1:1161),] %>% 
-  mutate(Date = as.Date(paste0(X,"01"), format = "%Y%m%d")) %>% 
-  mutate(across(-c(Date), as.numeric)) %>% select(-X) 
-
-# create factors data frame 
-factors <- data.frame(DATE = ff_factors$Date, 
-                      `Excess Market Return`=ff_factors$`Excess Market Return`, 
-                      SMB = ff_factors$SMB,
-                      HML = ff_factors$HML)
-
-# create characteristic data frame 
-characteristic <- testasset %>%
-  pivot_longer(cols = -Date, 
-               names_to = "Portfolio", 
-               values_to = "Return") %>% 
-  select(-Return) %>% 
-  mutate(Size = rnorm(n=55728, mean = 1.6, sd = 3.2), 
-         B2M = rnorm(n=55728, mean = 2, sd = 4),
-         Revenue = rnorm(n=55728, mean = 4, sd = 8))
-
-
 # cross-sectional test
-cross_section_opt <- cross_sec_test(testasset,
+cross_section <- cross_sec_test(testasset,
                                         factors,
-                                        characteristic=NULL,
+                                        #characteristic=NULL,
                                         model="cross-section",
-                                        char.only = FALSE,
+                                        #char.only = FALSE,
                                         sd = "standard")
 
 ## fama-mcbeth

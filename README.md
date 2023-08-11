@@ -39,9 +39,9 @@ A list containing:
 This function conducts a cross-sectional or Fama-Macbeth regression test on asset returns against specified factors and/or characteristics.
 
 #### Parameters:
-- `testasset`: A dataframe containing asset returns with a Date column.
+- `testasset`: A dataframe in long format that includes a Date class column, a column indicating the portfolio or asset names, and a column representing returns.
 - `factors`: A dataframe containing factor returns with a Date column.
-- `characteristic`: Optional dataframe containing asset characteristics with a Date and Portfolio column.
+- `characteristic`: A dataframe in long format that includes a Date class column, a column indicating the portfolio or asset names, and columns representing signals/characteristics.
 - `model`: Regression model to use. Options are "cross-section" and "fama-macbeth". Default is "cross-section".
 - `char.only`: If TRUE, only uses characteristics in the regression. Default is FALSE.
 - `startdate`: Optional start date for the analysis.
@@ -50,6 +50,8 @@ This function conducts a cross-sectional or Fama-Macbeth regression test on asse
 
 #### Returns:
 A list containing results from the first and second stages of the regression. The exact contents depend on the chosen model and input data.
+
+P.s.: Please input data frames with variable names without spaces.
 
 ## Usage
 
