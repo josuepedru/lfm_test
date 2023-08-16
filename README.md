@@ -70,7 +70,7 @@ testasset <- read.csv("48_Industry_Portfolios.csv")
 result1 <- ts_test(testasset, ff_factors)
 
 # Conduct cross-sectional test
-cross_section_opt <- cross_sec_test(testasset, factors)
+cross_section <- cross_sec_test(testasset, factors)
 ```
 
 ## Contributing
