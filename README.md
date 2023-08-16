@@ -2,6 +2,13 @@
 
 This repository contains two primary functions for conducting time series tests and cross-sectional/Fama-Macbeth tests on financial data. These functions are designed to work with asset returns and factor data to evaluate the performance and risk of portfolios.
 
+## Reference
+
+The methodology and functions in this repository are primarily based on Chapter 12, "Regression-based tests of linear factor models", from John Cochrane's book "Asset Pricing". All equations and formulas implemented and referenced within this repository draw inspiration from this specific chapter. Users and readers are recommended to delve into this chapter for a more in-depth understanding of the underlying principles.
+
+For further context and a comprehensive treatment of the topics discussed here, users are encouraged to consult Cochrane's "Asset Pricing" directly.
+
+
 ## Dependencies
 - `dplyr`
 - `tidyr`
