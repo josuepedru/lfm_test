@@ -36,8 +36,6 @@ A list containing:
 ![CAPM Equation](https://latex.codecogs.com/svg.latex?\mathrm{R}_{\mathrm{t}}^{\mathrm{e}, \mathrm{i}}=\alpha_{\mathrm{i}}+\beta_{\mathrm{i}} \mathrm{R}_{\mathrm{t}}^{\mathrm{e}, \mathrm{m}}+\varepsilon_{\mathrm{t}}^{\mathrm{i}} \quad \mathrm{t}=1,2, \cdots, \mathrm{T})
 
 
-
-
 ### 2. `cross_sec_test()`
 
 #### Description:
