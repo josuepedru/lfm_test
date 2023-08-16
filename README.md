@@ -3,7 +3,6 @@
 This repository contains two primary functions for conducting time series tests and cross-sectional/Fama-Macbeth tests on financial data. These functions are designed to work with asset returns and factor data to evaluate the performance and risk of portfolios.
 
 ## Dependencies
-
 - `dplyr`
 - `tidyr`
 - `broom`
@@ -11,7 +10,6 @@ This repository contains two primary functions for conducting time series tests 
 - `sandwich`
 
 ## Functions
-
 ### 1. `ts_test()`
 
 #### Description:
@@ -32,6 +30,17 @@ A list containing:
 - `p_value_GRS`: P-value from the GRS test.
 - `risk_premium`: Expected factor returns.
 - `r_squared_adj`: Adjusted R-squared values.
+
+#### Mathematical Background:
+
+- The simplest way to test the CAPM is applying a time series regression: 
+    ![equation1](https://latex.codecogs.com/gif.latex?\mathrm{R}_{\mathrm{t}}^{\mathrm{e}, \mathrm{i}}=\alpha_{\mathrm{i}}+\beta_{\mathrm{i}} \mathrm{R}_{\mathrm{t}}^{\mathrm{e}, \mathrm{m}}+\varepsilon_{\mathrm{t}}^{\mathrm{i}} \quad \mathrm{t}=1,2, \cdots, \mathrm{T})
+
+- To test the joint significance of the intercepts, use:
+    ![equation2](https://latex.codecogs.com/gif.latex?\mathrm{T}\left[1+\frac{\mathrm{E}_{\mathrm{T}}(\mathrm{f})}{\sigma(\mathrm{f})}\right]^{(-1)} \alpha^{\prime} \Sigma^{-1} \alpha \sim \chi_{\mathrm{N}}^2)
+
+    where ![equation3](https://latex.codecogs.com/gif.latex?\mathrm{E}_{\mathrm{T}}(\mathrm{f})) denotes sample mean, ![equation4](https://latex.codecogs.com/gif.latex?\sigma(\mathrm{f})) denotes sample variance, ![equation5](https://latex.codecogs.com/gif.latex?\hat{\alpha}) is a vector of the estimated intercepts, and ![equation6](https://latex.codecogs.com/gif.latex?\hat{\Sigma}) is the residual covariance matrix, i.e. the sample estimate of ![equation7](https://latex.codecogs.com/gif.latex?\mathrm{E}\left(\varepsilon_{\mathrm{t}} \varepsilon_{\mathrm{t}}^{\prime}\right)=\Sigma).
+
 
 ### 2. `cross_sec_test()`
 
