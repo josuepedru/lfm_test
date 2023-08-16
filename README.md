@@ -3,7 +3,6 @@
 This repository contains two primary functions for conducting time series tests and cross-sectional/Fama-Macbeth tests on financial data. These functions are designed to work with asset returns and factor data to evaluate the performance and risk of portfolios.
 
 ## Dependencies
-
 - `dplyr`
 - `tidyr`
 - `broom`
@@ -11,7 +10,6 @@ This repository contains two primary functions for conducting time series tests 
 - `sandwich`
 
 ## Functions
-
 ### 1. `ts_test()`
 
 #### Description:
@@ -32,6 +30,13 @@ A list containing:
 - `p_value_GRS`: P-value from the GRS test.
 - `risk_premium`: Expected factor returns.
 - `r_squared_adj`: Adjusted R-squared values.
+
+#### Mathematical Background:
+
+![CAPM Equation](https://latex.codecogs.com/svg.latex?\mathrm{R}_{\mathrm{t}}^{\mathrm{e}, \mathrm{i}}=\alpha_{\mathrm{i}}+\beta_{\mathrm{i}} \mathrm{R}_{\mathrm{t}}^{\mathrm{e}, \mathrm{m}}+\varepsilon_{\mathrm{t}}^{\mathrm{i}} \quad \mathrm{t}=1,2, \cdots, \mathrm{T})
+
+
+
 
 ### 2. `cross_sec_test()`
 
