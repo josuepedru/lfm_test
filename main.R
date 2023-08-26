@@ -273,33 +273,3 @@ cross_sec_test <- function(testasset, factors = NULL,
 }
 
 
-# cross-sectional test
-cross_section <- cross_sec_test(testasset,
-                                        factors,
-                                        #characteristic=NULL,
-                                        model="cross-section",
-                                        #char.only = FALSE,
-                                        sd = "standard")
-
-## fama-mcbeth
-# test both, factors and characteristics
-both <- cross_sec_test(testasset,
-                           factors,
-                           characteristic,
-                           model="fama-macbeth",
-                           char.only = FALSE,
-                           sd = "standard")
-# test only characteristics
-charac_only <- cross_sec_test(testasset,
-                                  factors=NULL,
-                                  characteristic,
-                                  model="fama-macbeth",
-                                  char.only = TRUE,
-                                  sd = "standard")
-# test only factors
-factors_only <- cross_sec_test(testasset,
-                         factors=factors,
-                         characteristic=NULL,
-                         model="fama-macbeth",
-                         char.only = FALSE,
-                         sd = "standard")
