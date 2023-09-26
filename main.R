@@ -256,7 +256,7 @@ cross_sec_test <- function(testasset, factors = NULL,
     
     riskpremia_variance <- riskpremia %>%
       group_by(term) %>%
-      summarise(variance_beta = sum( (estimate-mean(estimate, na.rm = TRUE))^2,na.rm=TRUE) / (n()^2) )
+      summarise(variance_beta = sum((estimate-mean(estimate, na.rm = TRUE))^2,na.rm=TRUE) / (n()) )
     
     riskpremia_t_stat <- riskpremia_mean %>%
       left_join(riskpremia_variance, by = "term") %>%
