@@ -168,11 +168,13 @@ cross_sec_test <- function(testasset, factors = NULL,
       select(Instrument, term, estimate) %>%
       pivot_wider(names_from = term, values_from = estimate)
     
-    testasset <- testasset %>% left_join(loadings_long, by = "Instrument")
+    testasset <- testasset %>% 
+      left_join(loadings_long, by = "Instrument")
   }
   
   if (char.only || !is.null(characteristic)) {
-    famamcbeth_data <- testasset %>% left_join(characteristic, by = c("Date", "Instrument"))
+    famamcbeth_data <- testasset %>% 
+      left_join(characteristic, by = c("Date", "Instrument"))
   }
   
   rhs_formula <- famamcbeth_data %>%
@@ -254,12 +256,12 @@ cross_sec_test <- function(testasset, factors = NULL,
     
     riskpremia_variance <- riskpremia %>%
       group_by(term) %>%
-      summarise(variance_beta = var(estimate, na.rm = TRUE))
+      summarise(variance_beta = sum( (estimate-mean(estimate, na.rm = TRUE))^2,na.rm=TRUE) / (n()^2) )
     
     riskpremia_t_stat <- riskpremia_mean %>%
       left_join(riskpremia_variance, by = "term") %>%
       mutate(T = n(),
-             t_stat = mean_beta / sqrt(variance_beta / T)) %>%
+             t_stat = mean_beta / sqrt(variance_beta / T) ) %>%
       select(term, t_stat)
     
     output$second_stage <- list(
