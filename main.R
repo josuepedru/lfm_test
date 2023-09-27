@@ -222,14 +222,13 @@ cross_sec_test <- function(testasset, factors = NULL,
   ## Fama-Mcbeth
   if (model == "fama-macbeth"){
     
-    famamcbeth_result <- famamcbeth_data %>%
-      na.omit() %>% 
-      group_by(Date) %>%
-      nest_by() %>%
-      mutate(model = list(lm(formula = paste("Return ~", rhs_formula), data = data)),
-             tidied = list(broom::tidy(model))) %>%
-      select(-data, -model) %>%
-      unnest(tidied)
+    famamcbeth_result <-  famamcbeth_data %>% 
+      drop_na() %>% 
+      nest(data=c(Instrument,names(famamcbeth_data%>%select(where(is.numeric))))) %>% 
+      mutate(etimates = map(data, ~tidy(lm(formula = paste("Return ~", rhs_formula), 
+                                           data = .x)))) %>% 
+      select(-data) %>% 
+      unnest()
     
     # Prepare output
     output <- list()
@@ -252,17 +251,17 @@ cross_sec_test <- function(testasset, factors = NULL,
     
     riskpremia_mean <- riskpremia %>%
       group_by(term) %>%
-      summarise(mean_beta = mean(estimate, na.rm = TRUE))
+      summarise(mean_beta = mean(estimate))
     
     riskpremia_variance <- riskpremia %>%
       group_by(term) %>%
-      summarise(variance_beta = sum((estimate-mean(estimate, na.rm = TRUE))^2,na.rm=TRUE) / (n()) )
+      summarise(variance_beta = sum((estimate-mean(estimate))^2) / (n()^2) )
     
     riskpremia_t_stat <- riskpremia_mean %>%
       left_join(riskpremia_variance, by = "term") %>%
       mutate(T = n(),
-             t_stat = mean_beta / sqrt(variance_beta / T) ) %>%
-      select(term, t_stat)
+             t_stat = mean_beta / sqrt(variance_beta) ) %>%
+      select(term, t_stat) 
     
     output$second_stage <- list(
       riskpremia = riskpremia,
