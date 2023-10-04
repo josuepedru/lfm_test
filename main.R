@@ -223,7 +223,8 @@ cross_sec_test <- function(testasset, factors = NULL,
   if (model == "fama-macbeth"){
     
     famamcbeth_result <-  famamcbeth_data %>% 
-      drop_na() %>% 
+      drop_na() %>%
+      arrange(Date) %>% 
       nest(data=c(Instrument,names(famamcbeth_data%>%select(where(is.numeric))))) %>% 
       mutate(etimates = map(data, ~tidy(lm(formula = paste("Return ~", rhs_formula), 
                                            data = .x)))) %>% 
