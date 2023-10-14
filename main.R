@@ -169,12 +169,12 @@ cross_sec_test <- function(testasset, factors = NULL,
       select(Instrument, term, estimate) %>%
       pivot_wider(names_from = term, values_from = estimate)
     
-    testasset <- testasset %>% 
+    famamcbeth_data <- testasset %>% 
       left_join(loadings_long, by = "Instrument")
   }
   
   if (char.only || !is.null(characteristic)) {
-    famamcbeth_data <- testasset %>% 
+    famamcbeth_data <- famamcbeth_data %>% 
       left_join(characteristic, by = c("Date", "Instrument"))
   }
   
