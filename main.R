@@ -128,7 +128,7 @@ ts_test <- function(testasset, factors, startdate = NULL, enddate = NULL, sd = c
   # output
   return(list(loadings = loadings, residuals = residuals, 
               intercepts = intercepts, p_value = p_value, 
-              risk_premium = E_f))
+              risk_premium = E_f, asdasd))
 }
 
 
