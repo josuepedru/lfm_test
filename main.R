@@ -3,6 +3,7 @@ library(tidyr)
 library(broom)
 library(lmtest)
 library(sandwich)
+library(lubridate)
 
 ### time series test ####
 ts_test <- function(testasset, factors, startdate = NULL, enddate = NULL, sd = c("standard", "neweywest")){
