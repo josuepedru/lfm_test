@@ -1,6 +1,7 @@
 library(dplyr)
 library(tidyr)
 library(broom)
+library(purrr)
 library(lmtest)
 library(sandwich)
 library(lubridate)
