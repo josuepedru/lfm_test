@@ -175,7 +175,7 @@ cross_sec_test <- function(testasset, factors = NULL,
   }
   
   if (char.only || !is.null(characteristic)) {
-    famamcbeth_data <- famamcbeth_data %>% 
+    famamcbeth_data <- testasset %>% 
       left_join(characteristic, by = c("Date", "Instrument"))
   }
   
